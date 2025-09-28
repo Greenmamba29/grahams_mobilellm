@@ -4,7 +4,13 @@ const nextConfig = {
     domains: ['supabase.co'],
   },
   experimental: {
-    serverComponentsExternalPackages: ['tesseract.js'],
+    serverComponentsExternalPackages: ['tesseract.js', 'pdf-parse', 'mammoth'],
+  },
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.externals.push('tesseract.js');
+    }
+    return config;
   },
 };
 

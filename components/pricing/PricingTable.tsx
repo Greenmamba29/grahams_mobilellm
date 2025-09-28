@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Check, Zap, Building, Crown } from '@phosphor-icons/react';
+import { Check, Zap, Building, Crown } from 'lucide-react';
 
 interface PricingPlan {
   id: string;
