@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   Send, 
   Upload, 
@@ -13,9 +14,11 @@ import {
   Image as ImageIcon, 
   Video, 
   ExternalLink,
-  Loader2
+  Loader2,
+  BookOpen,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
-// import { processQuery } from '@/app/action'; // Replaced with standalone function
 
 interface Message {
   id: string;
@@ -25,7 +28,24 @@ interface Message {
   searchResults?: any[];
   images?: any[];
   videos?: any[];
-  documentContext?: string;
+  sources?: DocumentSource[];
+  error?: boolean;
+}
+
+interface DocumentSource {
+  id: string;
+  name: string;
+  category?: string;
+  summary?: string;
+}
+
+interface Document {
+  id: string;
+  originalName: string;
+  status: 'processing' | 'completed' | 'failed';
+  category?: string;
+  summary?: string;
+  textContent?: string;
 }
 
 interface SearchResult {
@@ -35,53 +55,44 @@ interface SearchResult {
   favicon?: string;
 }
 
-// Standalone process query function for demo
-const processQuery = async (query: string, documentContext?: string) => {
-  // Simulate processing time
-  await new Promise(resolve => setTimeout(resolve, 1500));
-  
-  // Mock responses based on query content
-  const mockResponses = {
-    web: {
-      llmResponse: `Based on web search results for "${query}", I found relevant information. This is a demonstration of how the LLM Answer Engine processes queries and provides comprehensive answers with sources.`,
-      searchResults: [
-        {
-          title: `Information about ${query}`,
-          link: 'https://example.com/result1',
-          snippet: `Relevant information about ${query} from trusted sources...`,
-          favicon: 'https://www.google.com/favicon.ico'
-        },
-        {
-          title: `More details on ${query}`,
-          link: 'https://example.com/result2', 
-          snippet: `Additional context and details about your query...`,
-          favicon: 'https://www.google.com/favicon.ico'
-        }
-      ],
-      images: [],
-      videos: []
-    },
-    document: {
-      llmResponse: `Based on the uploaded document and your question "${query}", I can provide specific insights from the content. The document contains relevant information that directly answers your question.\n\nKey points from the document:\n- Context-aware analysis\n- Document-specific insights\n- Precise answers based on your content`,
-      searchResults: [],
-      images: [],
-      videos: []
-    },
-    general: {
-      llmResponse: `I understand you're asking about "${query}". This is a comprehensive answer that demonstrates the LLM Answer Engine's ability to provide detailed, thoughtful responses to user questions.\n\nThe system combines:\n• Web search capabilities\n• Document analysis\n• AI-powered reasoning\n• Multi-source information synthesis`,
-      searchResults: [],
-      images: [],
-      videos: []
+// Real API integration for chat processing
+const processQuery = async (query: string, selectedDocuments: string[] = [], documentContext?: string) => {
+  try {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query,
+        documentIds: selectedDocuments,
+        documentContext
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-  };
-  
-  // Determine response type
-  if (documentContext && documentContext.length > 10) {
-    return mockResponses.document;
-  } else if (query.toLowerCase().includes('search') || query.toLowerCase().includes('find') || query.toLowerCase().includes('what is')) {
-    return mockResponses.web;
-  } else {
-    return mockResponses.general;
+
+    return await response.json();
+  } catch (error) {
+    console.error('Chat API error:', error);
+    
+    // Graceful fallback for demo purposes
+    return {
+      llmResponse: `I understand you're asking about "${query}". I apologize, but I'm currently unable to process your request due to a technical issue. This could be due to:
+
+• API configuration issues
+• Network connectivity problems
+• Service temporarily unavailable
+
+Please try again in a moment or contact support if the issue persists.`,
+      sources: [],
+      searchResults: [],
+      images: [],
+      videos: [],
+      error: true
+    };
   }
 };
 
@@ -90,6 +101,9 @@ export default function ChatInterface() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [documentContext, setDocumentContext] = useState<string>('');
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
+  const [loadingDocuments, setLoadingDocuments] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -100,6 +114,51 @@ export default function ChatInterface() {
     scrollToBottom();
   }, [messages]);
 
+  // Fetch available documents on component mount
+  useEffect(() => {
+    fetchDocuments();
+  }, []);
+
+  const fetchDocuments = async () => {
+    setLoadingDocuments(true);
+    try {
+      const response = await fetch('/api/documents');
+      if (response.ok) {
+        const data = await response.json();
+        const completedDocs = data.documents?.filter((doc: Document) => doc.status === 'completed') || [];
+        setDocuments(completedDocs);
+        
+        // Auto-select all completed documents by default
+        setSelectedDocuments(completedDocs.map((doc: Document) => doc.id));
+      }
+    } catch (error) {
+      console.error('Error fetching documents:', error);
+      // In demo mode, use mock documents
+      const mockDocs = [
+        {
+          id: '1',
+          originalName: 'Contract_2024.pdf',
+          status: 'completed' as const,
+          category: 'contract',
+          summary: 'Service agreement between Company A and Company B for consulting services.',
+          textContent: 'This agreement is made between Company A and Company B for consulting services worth $50,000...'
+        },
+        {
+          id: '2',
+          originalName: 'Q3_Financial_Report.docx', 
+          status: 'completed' as const,
+          category: 'report',
+          summary: 'Quarterly financial performance analysis showing 15% revenue growth.',
+          textContent: 'Q3 2024 financial results show strong performance with $2.5M revenue representing 15% growth...'
+        }
+      ];
+      setDocuments(mockDocs);
+      setSelectedDocuments(['1', '2']);
+    } finally {
+      setLoadingDocuments(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
@@ -108,16 +167,17 @@ export default function ChatInterface() {
       id: Date.now().toString(),
       role: 'user',
       content: input,
-      timestamp: new Date(),
-      documentContext: documentContext || undefined
+      timestamp: new Date()
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const queryInput = input;
     setInput('');
     setIsLoading(true);
 
     try {
-      const response = await processQuery(input, documentContext || undefined);
+      // Use real API with selected documents
+      const response = await processQuery(queryInput, selectedDocuments, documentContext);
       
       // Create assistant message
       const assistantMessage: Message = {
@@ -125,9 +185,11 @@ export default function ChatInterface() {
         role: 'assistant',
         content: response.llmResponse,
         timestamp: new Date(),
-        searchResults: response.searchResults,
-        images: response.images,
-        videos: response.videos
+        searchResults: response.searchResults || [],
+        images: response.images || [],
+        videos: response.videos || [],
+        sources: response.sources || [],
+        error: response.error || false
       };
 
       setMessages(prev => [...prev, assistantMessage]);
@@ -136,8 +198,9 @@ export default function ChatInterface() {
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: 'I apologize, but I encountered an error. Please try again.',
+        content: 'I apologize, but I encountered an error processing your request. Please try again or check your internet connection.',
         timestamp: new Date(),
+        error: true
       }]);
     } finally {
       setIsLoading(false);
@@ -167,8 +230,40 @@ export default function ChatInterface() {
       {/* Header */}
       <div className="border-b bg-white p-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">LLM Answer Engine</h1>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold">LLM Answer Engine</h1>
+            <Badge variant="outline" className="flex items-center gap-1">
+              <BookOpen className="h-3 w-3" />
+              {documents.length} docs available
+            </Badge>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            {/* Document Selection */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium">Search in:</label>
+              <Select 
+                value={selectedDocuments.length === documents.length ? 'all' : selectedDocuments.length === 0 ? 'none' : 'custom'} 
+                onValueChange={(value) => {
+                  if (value === 'all') {
+                    setSelectedDocuments(documents.map(d => d.id));
+                  } else if (value === 'none') {
+                    setSelectedDocuments([]);
+                  }
+                }}
+              >
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Documents ({documents.length})</SelectItem>
+                  <SelectItem value="none">No Documents</SelectItem>
+                  <SelectItem value="custom">Custom Selection</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* File Upload */}
             <input
               type="file"
               accept=".txt,.md"
@@ -182,11 +277,22 @@ export default function ChatInterface() {
               onClick={() => document.getElementById('file-upload')?.click()}
             >
               <Upload className="h-4 w-4 mr-2" />
-              Add Document
+              Add Text File
             </Button>
+            
+            {/* Refresh Documents */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={fetchDocuments}
+              disabled={loadingDocuments}
+            >
+              <RefreshCw className={`h-4 w-4 ${loadingDocuments ? 'animate-spin' : ''}`} />
+            </Button>
+            
             {documentContext && (
               <Badge variant="secondary">
-                Document Loaded ({Math.round(documentContext.length / 100)}0 chars)
+                Text Context ({Math.round(documentContext.length / 100)}0 chars)
               </Badge>
             )}
           </div>
@@ -198,17 +304,68 @@ export default function ChatInterface() {
         {messages.length === 0 && (
           <div className="text-center text-gray-500 mt-8">
             <h2 className="text-xl mb-2">Welcome to LLM Answer Engine</h2>
-            <p>Ask me anything! I can search the web, process documents, and provide detailed answers.</p>
-            <div className="mt-4 text-sm">
-              <p>✨ <strong>Powered by:</strong> Web Search + Document Intelligence + AI</p>
+            <p>Ask me anything about your documents! I can analyze, summarize, and answer questions.</p>
+            <div className="mt-4 text-sm space-y-2">
+              <p>✨ <strong>Powered by:</strong> OpenAI GPT + Document Intelligence + Real-time Analysis</p>
+              {documents.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 max-w-md mx-auto">
+                  <p className="font-medium text-blue-800 mb-2">📚 Available Documents:</p>
+                  <div className="space-y-1">
+                    {documents.slice(0, 3).map(doc => (
+                      <div key={doc.id} className="text-blue-700 text-xs flex items-center gap-2">
+                        <FileText className="h-3 w-3" />
+                        <span>{doc.originalName}</span>
+                        {doc.category && <Badge variant="outline" className="text-xs">{doc.category}</Badge>}
+                      </div>
+                    ))}
+                    {documents.length > 3 && (
+                      <p className="text-blue-600 text-xs">...and {documents.length - 3} more documents</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
 
         {messages.map((message) => (
           <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-3xl ${message.role === 'user' ? 'bg-blue-500 text-white' : 'bg-white border'} rounded-lg p-4 shadow-sm`}>
+            <div className={`max-w-3xl ${message.role === 'user' ? 'bg-blue-500 text-white' : `${message.error ? 'bg-red-50 border-red-200' : 'bg-white border'}`} rounded-lg p-4 shadow-sm`}>
+              {message.error && (
+                <div className="flex items-center gap-2 mb-3 text-red-600">
+                  <AlertCircle className="h-4 w-4" />
+                  <span className="text-sm font-medium">Error occurred</span>
+                </div>
+              )}
               <div className="whitespace-pre-wrap">{message.content}</div>
+              
+              {/* Document Sources */}
+              {message.role === 'assistant' && message.sources && message.sources.length > 0 && (
+                <div className="mt-4 border-t pt-3">
+                  <p className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                    <BookOpen className="h-4 w-4" />
+                    Sources from your documents:
+                  </p>
+                  <div className="space-y-2">
+                    {message.sources.map((source, idx) => (
+                      <div key={idx} className="bg-gray-50 rounded-lg p-2 border">
+                        <div className="flex items-start gap-2">
+                          <FileText className="h-4 w-4 mt-0.5 text-gray-500" />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm text-gray-900 truncate">{source.name}</p>
+                            {source.category && (
+                              <Badge variant="outline" className="text-xs mt-1">{source.category}</Badge>
+                            )}
+                            {source.summary && (
+                              <p className="text-xs text-gray-600 mt-1 line-clamp-2">{source.summary}</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               
               {message.role === 'assistant' && (message.searchResults || message.images || message.videos) && (
                 <div className="mt-4">
