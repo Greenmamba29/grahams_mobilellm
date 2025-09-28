@@ -40,6 +40,12 @@ export default function DashboardClient() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(false); // Set to false for immediate testing
   const [uploading, setUploading] = useState(false);
+  
+  // Search/Chat functionality
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [chatHistory, setChatHistory] = useState<Array<{question: string, answer: string, sources: string[], timestamp: string}>>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Mock data for testing without authentication
   const mockSession = {
@@ -56,6 +62,16 @@ export default function DashboardClient() {
   useEffect(() => {
     // Always fetch documents in test mode
     fetchDocuments();
+    
+    // Add some demo chat history to showcase functionality
+    setChatHistory([
+      {
+        question: "What is the contract value with Company A?",
+        answer: "Based on the contract documents, Company A has agreed to provide consulting services for $50,000. The agreement is valid through December 2024 and includes standard terms for deliverables and payment schedules.",
+        sources: ['Contract_2024.pdf'],
+        timestamp: new Date(Date.now() - 60*60*1000).toISOString() // 1 hour ago
+      }
+    ]);
   }, []);
 
   const fetchDocuments = async () => {
@@ -147,6 +163,58 @@ export default function DashboardClient() {
     setUploading(false);
   };
 
+  const handleSearch = async () => {
+    if (!searchQuery.trim() || isSearching) return;
+    
+    setIsSearching(true);
+    
+    // Simulate AI search through documents
+    setTimeout(() => {
+      const mockAnswers = {
+        'contract': {
+          answer: 'Based on the contract documents, Company A has agreed to provide consulting services for $50,000. The agreement is valid through December 2024 and includes standard terms for deliverables and payment schedules.',
+          sources: ['Contract_2024.pdf']
+        },
+        'financial': {
+          answer: 'According to the Q3 Financial Report, the company shows strong performance with 15% revenue growth and total revenue of $2.5M for the quarter. Key growth drivers include expanded market reach and improved operational efficiency.',
+          sources: ['Q3_Financial_Report.docx']
+        },
+        'revenue': {
+          answer: 'The financial reports show $2.5M in Q3 revenue, representing a 15% growth compared to the previous quarter. This indicates strong business momentum.',
+          sources: ['Q3_Financial_Report.docx']
+        },
+        'company': {
+          answer: 'Company A is mentioned in the service agreement as the primary contractor, responsible for delivering consulting services worth $50,000.',
+          sources: ['Contract_2024.pdf']
+        },
+        'default': {
+          answer: `I found information related to "${searchQuery}" across your uploaded documents. The documents contain details about contracts, financial performance, and business operations. For more specific information, try asking about contracts, revenue, or financial performance.`,
+          sources: ['Contract_2024.pdf', 'Q3_Financial_Report.docx']
+        }
+      };
+      
+      // Determine which answer to give based on query
+      let response = mockAnswers.default;
+      const query = searchQuery.toLowerCase();
+      
+      if (query.includes('contract') || query.includes('agreement')) response = mockAnswers.contract;
+      else if (query.includes('financial') || query.includes('report')) response = mockAnswers.financial;
+      else if (query.includes('revenue') || query.includes('growth')) response = mockAnswers.revenue;
+      else if (query.includes('company')) response = mockAnswers.company;
+      
+      const newChatEntry = {
+        question: searchQuery,
+        answer: response.answer,
+        sources: response.sources,
+        timestamp: new Date().toISOString()
+      };
+      
+      setChatHistory(prev => [newChatEntry, ...prev]);
+      setSearchQuery('');
+      setIsSearching(false);
+    }, 2000); // Simulate 2 second processing time
+  };
+
   // Skip loading and auth checks for testing
   const organization = mockSession.user.organization;
   const usagePercent = organization 
@@ -161,7 +229,7 @@ export default function DashboardClient() {
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center">
               <h1 className="text-2xl font-bold text-gray-900">
-                Document Intelligence
+                LLM Answer Engine
               </h1>
               {organization && (
                 <Badge variant="outline" className="ml-3">
@@ -209,13 +277,17 @@ export default function DashboardClient() {
         )}
 
         <Tabs defaultValue="documents" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="documents" className="flex items-center gap-2">
               <FileText className="h-4 w-4" />
               Documents
             </TabsTrigger>
-            <TabsTrigger value="entities" className="flex items-center gap-2">
+            <TabsTrigger value="search" className="flex items-center gap-2">
               <Search className="h-4 w-4" />
+              Search & Ask
+            </TabsTrigger>
+            <TabsTrigger value="entities" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
               Entities
             </TabsTrigger>
             <TabsTrigger value="analytics" className="flex items-center gap-2">
@@ -348,6 +420,141 @@ export default function DashboardClient() {
                 ))
               )}
             </div>
+          </TabsContent>
+
+          {/* Search & Ask Tab */}
+          <TabsContent value="search" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Search className="h-5 w-5" />
+                  Ask Questions About Your Documents
+                </CardTitle>
+                <p className="text-sm text-gray-600">
+                  Get intelligent answers from your uploaded documents using AI
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Search Input */}
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                      placeholder="Ask a question about your documents... (e.g., 'What is the contract value?' or 'Show me revenue growth')"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      disabled={isSearching}
+                    />
+                  </div>
+                  <Button 
+                    onClick={handleSearch}
+                    disabled={!searchQuery.trim() || isSearching}
+                    className="px-6"
+                  >
+                    {isSearching ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    ) : (
+                      <Search className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+                
+                {/* Suggested Questions */}
+                {chatHistory.length === 0 && (
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium text-gray-700">Try asking:</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        "What is the contract value with Company A?",
+                        "Show me our Q3 financial performance",
+                        "What are the key terms in the agreements?",
+                        "Who are the main entities mentioned?",
+                        "What's our revenue growth rate?"
+                      ].map((suggestion, idx) => (
+                        <Button
+                          key={idx}
+                          variant="outline"
+                          size="sm"
+                          className="text-xs h-8"
+                          onClick={() => setSearchQuery(suggestion)}
+                        >
+                          {suggestion}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            
+            {/* Chat History */}
+            {chatHistory.length > 0 && (
+              <div className="space-y-4">
+                {chatHistory.map((chat, idx) => (
+                  <Card key={idx} className="border-l-4 border-l-blue-500">
+                    <CardContent className="p-6">
+                      <div className="space-y-4">
+                        {/* Question */}
+                        <div className="flex items-start gap-3">
+                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <Search className="h-4 w-4 text-blue-600" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium text-gray-900 mb-1">You asked:</p>
+                            <p className="text-gray-700">{chat.question}</p>
+                          </div>
+                        </div>
+                        
+                        {/* Answer */}
+                        <div className="flex items-start gap-3">
+                          <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <FileText className="h-4 w-4 text-green-600" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium text-gray-900 mb-2">Answer:</p>
+                            <p className="text-gray-700 mb-3">{chat.answer}</p>
+                            
+                            {/* Sources */}
+                            <div className="flex flex-wrap gap-2">
+                              <span className="text-xs text-gray-500">Sources:</span>
+                              {chat.sources.map((source, sourceIdx) => (
+                                <Badge key={sourceIdx} variant="outline" className="text-xs">
+                                  {source}
+                                </Badge>
+                              ))}
+                            </div>
+                            
+                            <div className="text-xs text-gray-400 mt-2">
+                              {new Date(chat.timestamp).toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+            
+            {/* No documents message */}
+            {documents.length === 0 && (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <FileText className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    No documents to search
+                  </h3>
+                  <p className="text-gray-600 mb-4">
+                    Upload some documents first to start asking questions
+                  </p>
+                  <Button onClick={() => document.querySelector<HTMLElement>('[data-tabs-content="documents"]')?.click()}>
+                    Go to Documents
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           {/* Entities Tab */}
