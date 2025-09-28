@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSession, signIn, signOut } from 'next-auth/react';
+// import { useSession, signIn, signOut } from 'next-auth/react'; // Disabled for demo
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -13,7 +13,6 @@ import {
   Users, 
   BarChart3, 
   Settings,
-  LogOut,
   Plus,
   Search,
   Filter,
@@ -37,24 +36,71 @@ interface Document {
 }
 
 export default function DashboardClient() {
-  const { data: session, status } = useSession();
+  // const { data: session, status } = useSession(); // Disabled for testing
   const [documents, setDocuments] = useState<Document[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // Set to false for immediate testing
   const [uploading, setUploading] = useState(false);
 
-  useEffect(() => {
-    if (status === 'authenticated') {
-      fetchDocuments();
+  // Mock data for testing without authentication
+  const mockSession = {
+    user: {
+      name: 'Test User',
+      organization: {
+        plan: 'Professional',
+        documentsUsed: 3,
+        documentsLimit: 100
+      }
     }
-  }, [status]);
+  };
+
+  useEffect(() => {
+    // Always fetch documents in test mode
+    fetchDocuments();
+  }, []);
 
   const fetchDocuments = async () => {
     try {
-      const response = await fetch('/api/documents');
-      if (response.ok) {
-        const data = await response.json();
-        setDocuments(data.documents);
-      }
+      // For testing, we'll simulate some documents since API requires auth
+      const mockDocuments = [
+        {
+          id: '1',
+          filename: 'sample-contract.pdf',
+          originalName: 'Contract_2024.pdf',
+          status: 'completed' as const,
+          category: 'contract',
+          summary: 'Service agreement between Company A and Company B for consulting services.',
+          wordCount: 1250,
+          createdAt: new Date().toISOString(),
+          entities: [
+            { text: 'Company A', type: 'ORGANIZATION', confidence: 0.95 },
+            { text: '$50,000', type: 'MONEY', confidence: 0.92 },
+            { text: 'December 2024', type: 'DATE', confidence: 0.88 }
+          ]
+        },
+        {
+          id: '2', 
+          filename: 'financial-report.docx',
+          originalName: 'Q3_Financial_Report.docx',
+          status: 'completed' as const,
+          category: 'report',
+          summary: 'Quarterly financial performance analysis showing 15% revenue growth.',
+          wordCount: 2100,
+          createdAt: new Date(Date.now() - 24*60*60*1000).toISOString(),
+          entities: [
+            { text: '15%', type: 'PERCENTAGE', confidence: 0.96 },
+            { text: 'Q3 2024', type: 'DATE', confidence: 0.94 },
+            { text: '$2.5M', type: 'MONEY', confidence: 0.91 }
+          ]
+        },
+        {
+          id: '3',
+          filename: 'processing-invoice.pdf', 
+          originalName: 'Invoice_1234.pdf',
+          status: 'processing' as const,
+          createdAt: new Date(Date.now() - 5*60*1000).toISOString(),
+        }
+      ];
+      setDocuments(mockDocuments);
     } catch (error) {
       console.error('Error fetching documents:', error);
     } finally {
@@ -68,74 +114,41 @@ export default function DashboardClient() {
     setUploading(true);
     
     for (const file of Array.from(files)) {
-      const formData = new FormData();
-      formData.append('file', file);
+      // Simulate upload process for testing
+      const mockDocument = {
+        id: Date.now().toString(),
+        filename: file.name,
+        originalName: file.name,
+        status: 'processing' as const,
+        createdAt: new Date().toISOString(),
+      };
       
-      try {
-        const response = await fetch('/api/documents/upload', {
-          method: 'POST',
-          body: formData,
-        });
-        
-        if (response.ok) {
-          const result = await response.json();
-          setDocuments(prev => [result.document, ...prev]);
-        } else {
-          const error = await response.json();
-          alert(error.error || 'Upload failed');
-        }
-      } catch (error) {
-        console.error('Upload error:', error);
-        alert('Upload failed');
-      }
+      setDocuments(prev => [mockDocument, ...prev]);
+      
+      // Simulate processing after 3 seconds
+      setTimeout(() => {
+        setDocuments(prev => prev.map(doc => 
+          doc.id === mockDocument.id 
+            ? {
+                ...doc,
+                status: 'completed' as const,
+                category: 'other',
+                summary: 'Demo processing completed - file uploaded successfully for testing.',
+                wordCount: Math.floor(Math.random() * 2000) + 500,
+                entities: [
+                  { text: 'Test Entity', type: 'ORGANIZATION', confidence: 0.85 }
+                ]
+              }
+            : doc
+        ));
+      }, 3000);
     }
     
     setUploading(false);
   };
 
-  if (status === 'loading') {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (status === 'unauthenticated') {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold text-gray-900">
-              Document Intelligence Platform
-            </CardTitle>
-            <p className="text-gray-600 mt-2">
-              AI-powered document processing and insights extraction
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Button 
-              onClick={() => signIn('google')} 
-              className="w-full"
-              size="lg"
-            >
-              Sign in with Google
-            </Button>
-            <div className="text-center">
-              <p className="text-sm text-gray-500">
-                Start with 5 free documents
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  const organization = session?.user?.organization;
+  // Skip loading and auth checks for testing
+  const organization = mockSession.user.organization;
   const usagePercent = organization 
     ? Math.round((organization.documentsUsed / organization.documentsLimit) * 100)
     : 0;
@@ -158,15 +171,11 @@ export default function DashboardClient() {
             </div>
             <div className="flex items-center space-x-4">
               <div className="text-sm text-gray-600">
-                {session?.user?.name}
+                {mockSession?.user?.name}
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => signOut()}
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
+              <Badge variant="secondary" className="text-xs">
+                DEMO MODE
+              </Badge>
             </div>
           </div>
         </div>
