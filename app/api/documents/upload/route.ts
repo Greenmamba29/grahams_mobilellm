@@ -5,6 +5,9 @@ import { prisma } from '@/lib/prisma';
 import { DocumentProcessor } from '@/lib/document-processor';
 import { createClient } from '@supabase/supabase-js';
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
 const getSupabaseClient = () => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
