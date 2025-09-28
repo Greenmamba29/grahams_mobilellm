@@ -1,35 +1,21 @@
 'use client';
-// 1. Import Dependencies
-import { FormEvent, useEffect, useRef, useState, useCallback } from 'react';
-import { useActions, readStreamableValue } from 'ai/rsc';
-import { type AI } from './action';
-import { ChatScrollAnchor } from '@/lib/hooks/chat-scroll-anchor';
-import Textarea from 'react-textarea-autosize';
-import { useEnterSubmit } from '@/lib/hooks/use-enter-submit';
-import { Tooltip, TooltipContent, TooltipTrigger, } from '@/components/ui/tooltip';
-import { Button } from '@/components/ui/button';
-import dynamic from 'next/dynamic';
-// Main components 
-import SearchResultsComponent from '@/components/answer/SearchResultsComponent';
-import UserMessageComponent from '@/components/answer/UserMessageComponent';
-import FollowUpComponent from '@/components/answer/FollowUpComponent';
-import InitialQueries from '@/components/answer/InitialQueries';
-// Sidebar components
-import LLMResponseComponent from '@/components/answer/LLMResponseComponent';
-import ImagesComponent from '@/components/answer/ImagesComponent';
-import VideosComponent from '@/components/answer/VideosComponent';
-// Function calling components
-const MapComponent = dynamic(() => import('@/components/answer/Map'), { ssr: false, });
-import MapDetails from '@/components/answer/MapDetails';
-import ShoppingComponent from '@/components/answer/ShoppingComponent';
-import FinancialChart from '@/components/answer/FinancialChart';
-import Spotify from '@/components/answer/Spotify';
-import ImageGenerationComponent from '@/components/answer/ImageGenerationComponent';
-import { ArrowUp, Paperclip } from '@phosphor-icons/react';
-// OPTIONAL: Use Upstash rate limiting to limit the number of requests per user
-import RateLimit from '@/components/answer/RateLimit';
-import { mentionToolConfig } from './tools/mentionToolConfig';
-// 2. Set up types
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+
+export default function Home() {
+  const router = useRouter();
+  
+  useEffect(() => {
+    router.push('/dashboard');
+  }, [router]);
+  
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+    </div>
+  );
+}
 interface SearchResult {
   favicon: string;
   link: string;
