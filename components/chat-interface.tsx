@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -17,8 +18,13 @@ import {
   Loader2,
   BookOpen,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  Bot,
+  User,
+  Sparkles
 } from 'lucide-react';
+import { kombaiAI } from '@/lib/kombai-ai-service';
+import { useResponsiveOptimization, getAnimationSettings } from '@/hooks/use-responsive-optimization';
 
 interface Message {
   id: string;
@@ -104,7 +110,19 @@ export default function ChatInterface() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
   const [loadingDocuments, setLoadingDocuments] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [showOptimizationSuggestion, setShowOptimizationSuggestion] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  
+  // Get Kombai AI optimizations
+  const chatAnalysis = kombaiAI.analyzeComponent('chat-interface');
+  const animationConfig = kombaiAI.getAnimationConfig('enter');
+  const a11yEnhancements = kombaiAI.getA11yEnhancements('chat-interface');
+  
+  // Get responsive optimizations
+  const responsiveOpt = useResponsiveOptimization();
+  const animationSettings = getAnimationSettings(responsiveOpt.viewport);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -161,7 +179,7 @@ export default function ChatInterface() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!input.trim() || isLoading) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -174,10 +192,20 @@ export default function ChatInterface() {
     const queryInput = input;
     setInput('');
     setIsLoading(true);
+    setIsTyping(true);
 
     try {
+      // Add realistic delay for better UX
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       // Use real API with selected documents
       const response = await processQuery(queryInput, selectedDocuments, documentContext);
+      
+      // Simulate typing delay based on response length
+      const typingDelay = Math.min(response.llmResponse.length * 10, 2000);
+      await new Promise(resolve => setTimeout(resolve, typingDelay));
+      
+      setIsTyping(false);
       
       // Create assistant message
       const assistantMessage: Message = {
@@ -195,6 +223,7 @@ export default function ChatInterface() {
       setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
       console.error('Chat error:', error);
+      setIsTyping(false);
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -204,9 +233,23 @@ export default function ChatInterface() {
       }]);
     } finally {
       setIsLoading(false);
+      setIsTyping(false);
     }
   };
 
+  // Enhanced keyboard handling
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e as any);
+    }
+    if (e.key === 'Escape') {
+      setInput('');
+      inputRef.current?.blur();
+    }
+  };
+
+  // File upload handler
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -216,6 +259,7 @@ export default function ChatInterface() {
       if (file.type === 'text/plain' || file.name.endsWith('.md') || file.name.endsWith('.txt')) {
         const text = await file.text();
         setDocumentContext(text.substring(0, 4000)); // Limit context size
+        console.log('File uploaded:', file.name, 'Context length:', text.length);
       } else {
         alert('Currently only text files (.txt, .md) are supported for document upload.');
       }
@@ -223,6 +267,99 @@ export default function ChatInterface() {
       console.error('File upload error:', error);
       alert('Error reading file. Please try again.');
     }
+  };
+
+  // Typing indicator component
+  const TypingIndicator = () => (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: animationSettings.duration, ease: "easeOut" }}
+      className="flex items-center space-x-3 p-4 mb-4"
+    >
+      <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+        <Bot className="w-4 h-4 text-blue-600" />
+      </div>
+      <div className="flex space-x-1">
+        {[0, 1, 2].map((i) => (
+          <motion.div
+            key={i}
+            className="w-2 h-2 bg-blue-400 rounded-full"
+            animate={{ scale: [1, 1.2, 1] }}
+            transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
+          />
+        ))}
+      </div>
+      <span className="text-sm text-gray-500">AI is thinking...</span>
+    </motion.div>
+  );
+
+  // Enhanced message component
+  const MessageBubble = ({ message, index }: { message: Message; index: number }) => {
+    const isUser = message.role === 'user';
+    const messageClasses = kombaiAI.generateOptimizedClasses(
+      'chat-message',
+      'light' // TODO: Add theme detection
+    ).join(' ');
+
+    return (
+      <motion.div
+        key={message.id}
+        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ 
+          duration: animationSettings.reduceMotion ? 0.1 : 0.3, 
+          ease: "easeOut",
+          delay: animationSettings.reduceMotion ? 0 : index * 0.1 
+        }}
+        className={`mb-4 ${isUser ? 'ml-auto max-w-[80%]' : 'mr-auto max-w-[90%]'}`}
+      >
+        <div className="flex items-start space-x-3">
+          {!isUser && (
+            <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center flex-shrink-0">
+              <Bot className="w-4 h-4 text-white" />
+            </div>
+          )}
+          <div className={`${messageClasses} ${isUser ? 'bg-blue-600 text-white ml-auto' : ''}`}>
+            <div className="prose prose-sm max-w-none">
+              {message.content}
+            </div>
+            
+            {message.sources && message.sources.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <BookOpen className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm font-medium text-gray-700">Sources:</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {message.sources.map((source, idx) => (
+                    <motion.div
+                      key={idx}
+                      whileHover={{ scale: 1.05 }}
+                      className="px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-medium cursor-pointer hover:bg-blue-100 transition-colors"
+                    >
+                      {source.name}
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {message.error && (
+              <div className="mt-2 flex items-center gap-2 text-red-600">
+                <AlertCircle className="w-4 h-4" />
+                <span className="text-sm">There was an issue processing your request</span>
+              </div>
+            )}
+          </div>
+          {isUser && (
+            <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0">
+              <User className="w-4 h-4 text-gray-600" />
+            </div>
+          )}
+        </div>
+      </motion.div>
+    );
   };
 
   return (
@@ -300,174 +437,171 @@ export default function ChatInterface() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+      <motion.div 
+        className="flex-1 overflow-y-auto p-4 bg-gradient-to-b from-gray-50 to-gray-100"
+        {...a11yEnhancements}
+      >
         {messages.length === 0 && (
-          <div className="text-center text-gray-500 mt-8">
-            <h2 className="text-xl mb-2">Welcome to LLM Answer Engine</h2>
-            <p>Ask me anything about your documents! I can analyze, summarize, and answer questions.</p>
-            <div className="mt-4 text-sm space-y-2">
-              <p>✨ <strong>Powered by:</strong> OpenAI GPT + Document Intelligence + Real-time Analysis</p>
-              {documents.length > 0 && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 max-w-md mx-auto">
-                  <p className="font-medium text-blue-800 mb-2">📚 Available Documents:</p>
-                  <div className="space-y-1">
-                    {documents.slice(0, 3).map(doc => (
-                      <div key={doc.id} className="text-blue-700 text-xs flex items-center gap-2">
-                        <FileText className="h-3 w-3" />
-                        <span>{doc.originalName}</span>
-                        {doc.category && <Badge variant="outline" className="text-xs">{doc.category}</Badge>}
-                      </div>
-                    ))}
-                    {documents.length > 3 && (
-                      <p className="text-blue-600 text-xs">...and {documents.length - 3} more documents</p>
-                    )}
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: animationSettings.duration, ease: "easeOut" }}
+            className="text-center text-gray-500 mt-8 max-w-2xl mx-auto"
+          >
+            <div className="bg-white rounded-2xl p-8 shadow-sm border">
+              <div className="flex items-center justify-center mb-4">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center">
+                  <Sparkles className="w-8 h-8 text-white" />
+                </div>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-3">Welcome to LLM Answer Engine</h2>
+              <p className="text-gray-600 mb-6">Ask me anything about your documents! I can analyze, summarize, and answer questions with AI-powered intelligence.</p>
+              
+              <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 mb-6">
+                <p className="text-sm font-medium text-gray-800 mb-2">✨ <strong>Enhanced with Kombai AI:</strong></p>
+                <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                    Smart Animations
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                    Responsive Design
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 bg-purple-400 rounded-full"></div>
+                    Real-time Analysis
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 bg-orange-400 rounded-full"></div>
+                    Optimized UX
                   </div>
                 </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {messages.map((message) => (
-          <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-3xl ${message.role === 'user' ? 'bg-blue-500 text-white' : `${message.error ? 'bg-red-50 border-red-200' : 'bg-white border'}`} rounded-lg p-4 shadow-sm`}>
-              {message.error && (
-                <div className="flex items-center gap-2 mb-3 text-red-600">
-                  <AlertCircle className="h-4 w-4" />
-                  <span className="text-sm font-medium">Error occurred</span>
-                </div>
-              )}
-              <div className="whitespace-pre-wrap">{message.content}</div>
+              </div>
               
-              {/* Document Sources */}
-              {message.role === 'assistant' && message.sources && message.sources.length > 0 && (
-                <div className="mt-4 border-t pt-3">
-                  <p className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+              {documents.length > 0 && (
+                <div className="bg-white border-2 border-blue-100 rounded-xl p-4">
+                  <p className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
                     <BookOpen className="h-4 w-4" />
-                    Sources from your documents:
+                    📚 Available Documents ({documents.length})
                   </p>
                   <div className="space-y-2">
-                    {message.sources.map((source, idx) => (
-                      <div key={idx} className="bg-gray-50 rounded-lg p-2 border">
-                        <div className="flex items-start gap-2">
-                          <FileText className="h-4 w-4 mt-0.5 text-gray-500" />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm text-gray-900 truncate">{source.name}</p>
-                            {source.category && (
-                              <Badge variant="outline" className="text-xs mt-1">{source.category}</Badge>
-                            )}
-                            {source.summary && (
-                              <p className="text-xs text-gray-600 mt-1 line-clamp-2">{source.summary}</p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                    {documents.slice(0, 3).map(doc => (
+                      <motion.div 
+                        key={doc.id} 
+                        className="text-blue-700 text-sm flex items-center gap-2 p-2 bg-blue-50 rounded-lg"
+                        whileHover={{ scale: 1.02 }}
+                      >
+                        <FileText className="h-3 w-3" />
+                        <span className="flex-1 truncate">{doc.originalName}</span>
+                        {doc.category && <Badge variant="outline" className="text-xs">{doc.category}</Badge>}
+                      </motion.div>
                     ))}
+                    {documents.length > 3 && (
+                      <p className="text-blue-600 text-sm text-center py-2">...and {documents.length - 3} more documents</p>
+                    )}
                   </div>
                 </div>
               )}
-              
-              {message.role === 'assistant' && (message.searchResults || message.images || message.videos) && (
-                <div className="mt-4">
-                  <Tabs defaultValue="sources" className="w-full">
-                    <TabsList className="grid grid-cols-3 w-full">
-                      {message.searchResults && message.searchResults.length > 0 && (
-                        <TabsTrigger value="sources" className="flex items-center gap-2">
-                          <ExternalLink className="h-4 w-4" />
-                          Sources ({message.searchResults.length})
-                        </TabsTrigger>
-                      )}
-                      {message.images && message.images.length > 0 && (
-                        <TabsTrigger value="images" className="flex items-center gap-2">
-                          <ImageIcon className="h-4 w-4" />
-                          Images ({message.images.length})
-                        </TabsTrigger>
-                      )}
-                      {message.videos && message.videos.length > 0 && (
-                        <TabsTrigger value="videos" className="flex items-center gap-2">
-                          <Video className="h-4 w-4" />
-                          Videos ({message.videos.length})
-                        </TabsTrigger>
-                      )}
-                    </TabsList>
-                    
-                    {message.searchResults && message.searchResults.length > 0 && (
-                      <TabsContent value="sources" className="space-y-2">
-                        {message.searchResults.map((result: SearchResult, idx: number) => (
-                          <Card key={idx} className="p-3">
-                            <a href={result.link} target="_blank" rel="noopener noreferrer" className="block hover:bg-gray-50">
-                              <div className="flex items-start gap-3">
-                                {result.favicon && <img src={result.favicon} alt="" className="w-4 h-4 mt-1" />}
-                                <div>
-                                  <h4 className="font-medium text-sm">{result.title}</h4>
-                                  <p className="text-xs text-gray-600 mt-1">{result.snippet}</p>
-                                </div>
-                              </div>
-                            </a>
-                          </Card>
-                        ))}
-                      </TabsContent>
-                    )}
-                    
-                    {message.images && message.images.length > 0 && (
-                      <TabsContent value="images" className="grid grid-cols-2 gap-2">
-                        {message.images.map((img: any, idx: number) => (
-                          <img key={idx} src={img.imageUrl} alt={img.title} className="w-full h-32 object-cover rounded" />
-                        ))}
-                      </TabsContent>
-                    )}
-                    
-                    {message.videos && message.videos.length > 0 && (
-                      <TabsContent value="videos" className="space-y-2">
-                        {message.videos.map((video: any, idx: number) => (
-                          <Card key={idx} className="p-3">
-                            <a href={video.link} target="_blank" rel="noopener noreferrer" className="block">
-                              <div className="flex items-center gap-3">
-                                <img src={video.thumbnail} alt="" className="w-16 h-12 object-cover rounded" />
-                                <div>
-                                  <h4 className="font-medium text-sm">{video.title}</h4>
-                                  {video.duration && <p className="text-xs text-gray-600">{video.duration}</p>}
-                                </div>
-                              </div>
-                            </a>
-                          </Card>
-                        ))}
-                      </TabsContent>
-                    )}
-                  </Tabs>
-                </div>
-              )}
             </div>
-          </div>
-        ))}
-        
-        {isLoading && (
-          <div className="flex justify-start">
-            <div className="bg-white border rounded-lg p-4 flex items-center gap-2 shadow-sm">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Searching and thinking...
-            </div>
-          </div>
+          </motion.div>
         )}
         
+        {/* Animated Message List */}
+        <AnimatePresence>
+          {messages.map((message, index) => (
+            <MessageBubble key={message.id} message={message} index={index} />
+          ))}
+          
+          {/* Typing Indicator */}
+          {isTyping && <TypingIndicator />}
+        </AnimatePresence>
         <div ref={messagesEndRef} />
-      </div>
+      </motion.div>
 
-      {/* Input */}
-      <div className="border-t bg-white p-4">
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask me anything..."
-            disabled={isLoading}
-            className="flex-1"
-          />
-          <Button type="submit" disabled={isLoading || !input.trim()}>
-            <Send className="h-4 w-4" />
-          </Button>
+      {/* Enhanced Input Area with Kombai AI */}
+      <motion.div 
+        className="border-t bg-white p-4 shadow-lg"
+        initial={{ y: 100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.3, delay: 0.2 }}
+      >
+        <form onSubmit={handleSubmit} className="max-w-4xl mx-auto">
+          <div className="flex items-end gap-3">
+            {/* Optimized Input */}
+            <div className="flex-1 relative">
+              <Input
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={selectedDocuments.length > 0 
+                  ? `Ask questions about ${selectedDocuments.length} selected document${selectedDocuments.length > 1 ? 's' : ''}...` 
+                  : "Ask me anything about your documents..."
+                }
+                disabled={isLoading}
+                className={kombaiAI.generateOptimizedClasses('chat-input', 'light').join(' ') + " min-h-[44px] pr-12"}
+              />
+              {input && (
+                <motion.button
+                  type="button"
+                  onClick={() => setInput('')}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <AlertCircle className="h-4 w-4" />
+                </motion.button>
+              )}
+            </div>
+            
+            {/* Enhanced Send Button */}
+            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+              <Button 
+                type="submit" 
+                disabled={isLoading || !input.trim()}
+                className={kombaiAI.generateOptimizedClasses('button-primary', 'light').join(' ') + " h-11"}
+              >
+                {isLoading ? (
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  >
+                    <Loader2 className="h-4 w-4" />
+                  </motion.div>
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+              </Button>
+            </motion.div>
+          </div>
+          
+          {/* Input Status/Hints */}
+          <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+            <div className="flex items-center gap-4">
+              {selectedDocuments.length > 0 && (
+                <span className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                  {selectedDocuments.length} document{selectedDocuments.length > 1 ? 's' : ''} selected
+                </span>
+              )}
+              {isTyping && (
+                <motion.span 
+                  className="flex items-center gap-1 text-blue-600"
+                  animate={{ opacity: [0.5, 1, 0.5] }}
+                  transition={{ duration: 1.5, repeat: Infinity }}
+                >
+                  <Bot className="w-3 h-3" />
+                  AI is typing...
+                </motion.span>
+              )}
+            </div>
+            <div className="text-right">
+              <span>Press Enter to send, Shift+Enter for new line</span>
+            </div>
+          </div>
         </form>
-      </div>
+      </motion.div>
     </div>
   );
 }

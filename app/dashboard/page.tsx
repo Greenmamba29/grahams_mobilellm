@@ -1,7 +1,7 @@
 'use client';
 
-import ChatInterface from '@/components/chat-interface';
+import EnhancedDashboard from '@/components/enhanced-dashboard';
 
 export default function Dashboard() {
-  return <ChatInterface />;
+  return <EnhancedDashboard />;
 }
